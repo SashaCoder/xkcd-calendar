@@ -9,6 +9,8 @@ import {
 } from './lib/xkcd'
 import { adjacentMonth, isWithinCalendarBounds, makeCalendarDays } from './lib/calendar'
 
+const fetchRuntimeFeed = import.meta.env.DEV ? fetchFeed : async () => []
+
 function monthLabel(year: number, month: number): string {
   return new Intl.DateTimeFormat(undefined, { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1))
 }
@@ -31,7 +33,7 @@ export default function App() {
     let cancelled = false
     fetchComicIndex().then((records) => {
       if (cancelled) return
-      const repo = createComicRepository({ initialRecords: records, fetchFeed, fetchComic })
+      const repo = createComicRepository({ initialRecords: records, fetchFeed: fetchRuntimeFeed, fetchComic })
       setRepository(repo)
       setAvailableYears(getComicYears(records, currentYear))
     }).catch((cause: unknown) => {
@@ -60,6 +62,8 @@ export default function App() {
   }, [repository, year, month, currentYear])
 
   const days = useMemo(() => makeCalendarDays(year, month, comics), [year, month, comics])
+  const expandedComic = useMemo(() => days.flatMap((day) => day.comics).find((comic) => comic.num === expanded), [days, expanded])
+  const expandedDay = useMemo(() => days.find((day) => day.comics.some((comic) => comic.num === expanded)), [days, expanded])
   const firstYear = availableYears[0] ?? currentYear
   const canGoPrevious = isWithinCalendarBounds(year - (month === 1 ? 1 : 0), month === 1 ? 12 : month - 1, firstYear, currentYear, currentMonth)
   const canGoNext = isWithinCalendarBounds(year + (month === 12 ? 1 : 0), month === 12 ? 1 : month + 1, firstYear, currentYear, currentMonth)
@@ -76,7 +80,7 @@ export default function App() {
       setError('')
       setLoading(true)
       fetchComicIndex().then((records) => {
-        const repo = createComicRepository({ initialRecords: records, fetchFeed, fetchComic })
+        const repo = createComicRepository({ initialRecords: records, fetchFeed: fetchRuntimeFeed, fetchComic })
         setRepository(repo)
         setAvailableYears(getComicYears(records, currentYear))
       }).catch((cause: unknown) => {
@@ -88,6 +92,20 @@ export default function App() {
     repository.clearFeedCache()
     setRepository({ ...repository } as ReturnType<typeof createComicRepository>)
   }
+
+  function closeExpanded() {
+    setExpanded(null)
+    setImageFailed(false)
+  }
+
+  useEffect(() => {
+    if (expanded === null) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') closeExpanded()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [expanded])
 
   return (
     <main className="app-shell">
@@ -120,22 +138,32 @@ export default function App() {
             ? <div className="day-cell blank-day" role="gridcell" aria-hidden="true" key={`blank-${index}`} />
             : <div className={`day-cell${day.comics.length ? ' has-comic' : ''}`} role="gridcell" aria-label={`${monthLabel(year, month).split(' ')[0]} ${day.date}${day.comics.length ? `, ${day.comics.length} comic${day.comics.length === 1 ? '' : 's'}` : ', no comic'}`} key={day.date}>
                 <span className="date-number">{day.date}</span>
-                {day.comics.length > 0 && <button className="comic-preview" type="button" onClick={() => { setExpanded(expanded === day.comics[0].num ? null : day.comics[0].num); setImageFailed(false) }} aria-expanded={expanded === day.comics[0].num} aria-label={`${expanded === day.comics[0].num ? 'Collapse' : 'Expand'} comic ${day.comics[0].num}: ${day.comics[0].title}`}>
+                {day.comics.length > 0 && <button className="comic-preview" type="button" onClick={() => { setExpanded(day.comics.some((comic) => comic.num === expanded) ? null : day.comics[0].num); setImageFailed(false) }} aria-expanded={day.comics.some((comic) => comic.num === expanded)} aria-label={`${day.comics.some((comic) => comic.num === expanded) ? 'Collapse' : 'Expand'} comic ${day.comics[0].num}: ${day.comics[0].title}`}>
                   <img src={day.comics[0].img} alt="" loading="lazy" />
                   <span>{day.comics[0].title}</span>
                 </button>}
                 {day.comics.length > 1 && <span className="more-comics">+{day.comics.length - 1} more</span>}
-                {expanded === day.comics[0]?.num && <div className="comic-expanded">
-                  <h2>{day.comics[0].title}</h2>
-                  {!imageFailed
-                    ? <img className="full-comic" src={day.comics[0].img} alt={day.comics[0].alt} onError={() => setImageFailed(true)} />
-                    : <p role="status" className="image-error">The comic image could not be loaded.</p>}
-                  <p className="comic-alt">{day.comics[0].alt}</p>
-                  {day.comics.slice(1).map((other) => <p className="other-comic" key={other.num}>Also published this day: <a href={other.link} target="_blank" rel="noreferrer">Comic #{other.num}: {other.title}</a></p>)}
-                </div>}
               </div>)}
         </div>}
       </section>
+      {expandedComic && <div className="comic-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) closeExpanded() }}>
+        <section className="comic-expanded" role="dialog" aria-modal="true" aria-labelledby="expanded-comic-title">
+          <button className="comic-close" type="button" onClick={closeExpanded} aria-label="Close expanded comic">Close</button>
+          <h2 id="expanded-comic-title">{expandedComic.title}</h2>
+          <div className="comic-view-layout">
+            <div className="comic-image-area">
+              {!imageFailed
+                ? <img className="full-comic" src={expandedComic.img} alt={expandedComic.alt} onError={() => setImageFailed(true)} />
+                : <p role="status" className="image-error">The comic image could not be loaded.</p>}
+              <p className="comic-alt">{expandedComic.alt}</p>
+            </div>
+            {expandedDay && expandedDay.comics.length > 1 && <aside className="comic-alternatives" aria-label="Other comics published this day">
+              <h3>Also published this day</h3>
+              <ul>{expandedDay.comics.map((other) => <li key={other.num}><a href={other.link} aria-current={other.num === expandedComic.num ? 'true' : undefined} onClick={(event) => { event.preventDefault(); setExpanded(other.num); setImageFailed(false) }}>Comic #{other.num}: {other.title}</a></li>)}</ul>
+            </aside>}
+          </div>
+        </section>
+      </div>}
       <footer className="site-footer">Comics by Randall Munroe · <a href="https://xkcd.com/">xkcd.com</a></footer>
     </main>
   )

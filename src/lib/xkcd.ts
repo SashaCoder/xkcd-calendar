@@ -196,7 +196,7 @@ export function createComicRepository(options: {
 }
 
 export async function fetchComicIndex(): Promise<XkcdComic[]> {
-  const response = await fetch('/xkcd-index.json')
+  const response = await fetch(`${import.meta.env.BASE_URL}xkcd-index.json`)
   if (!response.ok) throw new Error(`Archive index request failed (${response.status}).`)
   const data: unknown = await response.json()
   if (!Array.isArray(data)) throw new Error('Archive index is not a list.')

@@ -20,8 +20,9 @@ See `proposal.md` for the motivation. The current React calendar renders `.comic
 - Render the expanded content in a viewport-level overlay layer, centered with a fixed backdrop and a content container sized within the available viewport. This avoids day-cell clipping and lets the overlay occupy the middle of the screen; an inline positioned panel remains tied to the calendar grid.
 - Keep the existing preview button as the toggle and expose the overlay's dismiss action with an accessible button. Closing the overlay clears the selected comic so the button's expanded state remains accurate.
 - Render links for other comics on the same date inside the overlay. Selecting one updates the active comic details and image in that overlay, including its title and alt text, without dismissing the container.
+- Arrange the expanded view as a centered image area beside a visually distinct list box for same-date comics. Center the image within its area; place the list box to its right on wider viewports and below it on narrow viewports to avoid horizontal overflow. Keep every comic in the list, including the active comic, and mark the active link.
 - Reduce the preview image's maximum height and constrain its width within its day cell. Retain responsive overrides for narrow layouts so previews do not dominate either the grid or list view.
-- Keep the expanded image responsive to the viewport, with internal scrolling available when comic details exceed the available height.
+- Keep the overlay container fixed within the viewport without scrolling. Make its content a bounded flex layout so the comic image scales to the available image area and the alt text remains visible below it for portrait and landscape images. The side-by-side content area and list box must fit within the viewport-bounded overlay.
 
 ## Risks / Trade-offs
 

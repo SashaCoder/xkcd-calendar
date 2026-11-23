@@ -31,17 +31,42 @@ function setupApp(records = [record(2), record(1, 'First comic')]) {
 }
 
 describe('comic calendar interaction', () => {
-  it('shows the lowest-numbered shared-date comic and links to the others when expanded', async () => {
+  it('shows the lowest-numbered shared-date comic and switches comics inside a centered dialog', async () => {
     setupApp()
     const preview = await screen.findByRole('button', { name: /expand comic 1: first comic/i })
     expect(preview.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(preview)
     expect(await screen.findByRole('heading', { name: 'First comic' })).not.toBeNull()
     expect(screen.getByRole('img', { name: 'Alt text for First comic' })).not.toBeNull()
-    expect(screen.getByRole('link', { name: 'Comic #2: Comic 2' }).getAttribute('href')).toBe('https://xkcd.com/2/')
+    const dialog = screen.getByRole('dialog', { name: 'First comic' })
+    expect(dialog.className).toContain('comic-expanded')
+    expect(dialog.parentElement?.className).toContain('comic-overlay')
+    const imageArea = dialog.querySelector('.comic-image-area')
+    expect(imageArea).not.toBeNull()
+    expect(imageArea?.querySelector('img')?.className).toContain('full-comic')
+    expect(dialog.querySelector('.comic-view-layout')).not.toBeNull()
+    const alternatives = screen.getByRole('complementary', { name: 'Other comics published this day' })
+    expect(alternatives.querySelector('ul')).not.toBeNull()
+    const otherComic = screen.getByRole('link', { name: 'Comic #2: Comic 2' })
+    expect(alternatives.contains(otherComic)).toBe(true)
+    const selectedComic = screen.getByRole('link', { name: 'Comic #1: First comic' })
+    expect(alternatives.contains(selectedComic)).toBe(true)
+    expect(selectedComic.getAttribute('aria-current')).toBe('true')
+    expect(otherComic.getAttribute('href')).toBe('https://xkcd.com/2/')
     expect(preview.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(preview)
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'First comic' })).toBeNull())
+    fireEvent.click(otherComic)
+    expect(screen.getByRole('heading', { name: 'Comic 2' })).not.toBeNull()
+    expect(screen.getByRole('img', { name: 'Alt text for Comic 2' })).not.toBeNull()
+    expect(screen.getByRole('dialog', { name: 'Comic 2' })).not.toBeNull()
+    const alternativesAfterSwitch = screen.getByRole('complementary', { name: 'Other comics published this day' })
+    expect(alternativesAfterSwitch.querySelectorAll('a').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByRole('link', { name: 'Comic #1: First comic' }).getAttribute('aria-current')).toBeNull()
+    expect(screen.getByRole('link', { name: 'Comic #2: Comic 2' }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByText('Alt text for Comic 2')).not.toBeNull()
+    expect(preview.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Close expanded comic' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(preview.getAttribute('aria-expanded')).toBe('false')
   })
 
   it('reports a failed full comic image while keeping its alt text available', async () => {
@@ -54,17 +79,17 @@ describe('comic calendar interaction', () => {
     expect(screen.getByText('Alt text for First comic')).not.toBeNull()
   })
 
-  it('can expand and collapse a comic with the keyboard and exposes its state to assistive technology', async () => {
+  it('opens with the keyboard and dismisses with Escape while exposing its state', async () => {
     const user = userEvent.setup()
     setupApp([record(1, 'First comic')])
     const preview = await screen.findByRole('button', { name: /expand comic 1: first comic/i })
     preview.focus()
     await user.keyboard('{Enter}')
     expect(await screen.findByRole('heading', { name: 'First comic' })).not.toBeNull()
-    expect(document.activeElement).toBe(preview)
     expect(preview.getAttribute('aria-expanded')).toBe('true')
-    await user.keyboard(' ')
-    await waitFor(() => expect(screen.queryByRole('heading', { name: 'First comic' })).toBeNull())
+    expect(screen.getByRole('button', { name: 'Close expanded comic' })).not.toBeNull()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(preview.getAttribute('aria-expanded')).toBe('false')
   })
 
